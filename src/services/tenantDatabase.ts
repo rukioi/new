@@ -13,22 +13,42 @@ export class TenantDatabaseService {
     return TenantDatabaseService.instance;
   }
 
+  // Validar e normalizar tenant ID para segurança
+  private validateAndNormalizeTenantId(tenantId: string): string {
+    if (!tenantId || typeof tenantId !== 'string') {
+      throw new Error('Tenant ID is required and must be a string');
+    }
+    
+    // Validação rigorosa: apenas alfanuméricos e hífens
+    if (!/^[a-zA-Z0-9-]+$/.test(tenantId)) {
+      throw new Error('Invalid tenant ID format. Only alphanumeric characters and hyphens allowed.');
+    }
+    
+    // Validar comprimento
+    if (tenantId.length === 0 || tenantId.length > 50) {
+      throw new Error('Tenant ID must be between 1 and 50 characters');
+    }
+    
+    // Normalizar removendo hífens
+    const normalized = tenantId.replace(/-/g, '');
+    if (normalized.length === 0) {
+      throw new Error('Tenant ID cannot be only hyphens');
+    }
+    
+    return normalized;
+  }
+
   // Obter cliente Prisma para um tenant específico
   getTenantPrisma(tenantId: string): PrismaClient {
-    if (!tenantId) {
-      throw new Error('Tenant ID is required');
-    }
+    // Validar tenant ID primeiro
+    this.validateAndNormalizeTenantId(tenantId);
 
     // Verificar se já existe um cliente no cache
     if (tenantPrismaClients.has(tenantId)) {
       return tenantPrismaClients.get(tenantId)!;
     }
 
-    // Criar novo cliente Prisma com schema específico do tenant
-    const schemaName = `tenant_${tenantId.replace(/-/g, '')}`;
-    
-    // Como não temos acesso direto ao search path no Prisma,
-    // vamos usar a abordagem de SQL raw para operações específicas por tenant
+    // Criar novo cliente Prisma
     const prisma = new PrismaClient({
       datasources: {
         db: {
@@ -50,9 +70,12 @@ export class TenantDatabaseService {
     params: any[] = []
   ): Promise<T[]> {
     const prisma = this.getTenantPrisma(tenantId);
-    const schemaName = `tenant_${tenantId.replace(/-/g, '')}`;
     
-    // Substituir placeholder ${schema} pela schema real do tenant
+    // Validar e normalizar tenant ID de forma segura
+    const normalizedTenantId = this.validateAndNormalizeTenantId(tenantId);
+    const schemaName = `tenant_${normalizedTenantId}`;
+    
+    // Substituir placeholder ${schema} pela schema validada do tenant
     const finalQuery = query.replace(/\$\{schema\}/g, schemaName);
     
     try {

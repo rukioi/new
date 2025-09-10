@@ -74,14 +74,13 @@ export class TasksController {
 
       const { id } = req.params;
 
-      const mockTask = {
-        id,
-        title: 'Revisar contrato',
-        status: 'in_progress',
-        progress: 60,
-      };
+      const task = await tasksService.getTaskById(req.tenantId, id);
 
-      res.json({ task: mockTask });
+      if (!task) {
+        return res.status(404).json({ error: 'Task not found' });
+      }
+
+      res.json({ task });
     } catch (error) {
       console.error('Get task error:', error);
       res.status(500).json({

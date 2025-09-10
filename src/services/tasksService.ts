@@ -137,7 +137,16 @@ export class TasksService {
   // Atualizar tarefa
   async updateTask(tenantId: string, taskId: string, updateData: Partial<Task>): Promise<Task | null> {
     try {
-      const now = new Date().toISOString();
+      // Normalizar campos de camelCase para snake_case
+      const assignedTo = updateData.assignedTo || updateData.assigned_to;
+      const projectId = updateData.projectId || updateData.project_id;
+      const projectTitle = updateData.projectTitle || updateData.project_title;
+      const clientId = updateData.clientId || updateData.client_id;
+      const clientName = updateData.clientName || updateData.client_name;
+      const startDate = updateData.startDate || updateData.start_date;
+      const endDate = updateData.endDate || updateData.end_date;
+      const estimatedHours = updateData.estimatedHours || updateData.estimated_hours;
+      const actualHours = updateData.actualHours || updateData.actual_hours;
       
       const query = `
         UPDATE \${schema}.tasks 
@@ -147,10 +156,19 @@ export class TasksService {
           assigned_to = COALESCE($4, assigned_to),
           status = COALESCE($5, status),
           priority = COALESCE($6, priority),
-          end_date = COALESCE($7, end_date),
-          progress = COALESCE($8, progress),
-          notes = COALESCE($9, notes),
-          updated_at = $10
+          project_id = COALESCE($7, project_id),
+          project_title = COALESCE($8, project_title),
+          client_id = COALESCE($9, client_id),
+          client_name = COALESCE($10, client_name),
+          start_date = COALESCE($11::timestamp, start_date),
+          end_date = COALESCE($12::timestamp, end_date),
+          estimated_hours = COALESCE($13, estimated_hours),
+          actual_hours = COALESCE($14, actual_hours),
+          progress = COALESCE($15, progress),
+          tags = COALESCE($16::jsonb, tags),
+          notes = COALESCE($17, notes),
+          subtasks = COALESCE($18::jsonb, subtasks),
+          updated_at = NOW()
         WHERE id = $1 AND is_active = true
         RETURNING *
       `;
@@ -159,13 +177,21 @@ export class TasksService {
         taskId,
         updateData.title,
         updateData.description,
-        updateData.assigned_to,
+        assignedTo,
         updateData.status,
         updateData.priority,
-        updateData.end_date,
+        projectId,
+        projectTitle,
+        clientId,
+        clientName,
+        startDate,
+        endDate,
+        estimatedHours,
+        actualHours,
         updateData.progress,
+        updateData.tags ? JSON.stringify(updateData.tags) : null,
         updateData.notes,
-        now
+        updateData.subtasks ? JSON.stringify(updateData.subtasks) : null
       ];
 
       const result = await tenantDB.executeInTenantSchema<Task>(tenantId, query, params);
@@ -181,17 +207,19 @@ export class TasksService {
     try {
       const query = `
         UPDATE \${schema}.tasks 
-        SET is_active = false, updated_at = $2
+        SET is_active = false, updated_at = NOW()
         WHERE id = $1 AND is_active = true
+        RETURNING 1
       `;
 
-      await tenantDB.executeInTenantSchema(tenantId, query, [taskId, new Date().toISOString()]);
-      return true;
+      const result = await tenantDB.executeInTenantSchema(tenantId, query, [taskId]);
+      return result.length > 0;
     } catch (error) {
       console.error('Error deleting task:', error);
       return false;
     }
   }
+
 
   // Estatísticas de tarefas
   async getTaskStats(tenantId: string): Promise<any> {
