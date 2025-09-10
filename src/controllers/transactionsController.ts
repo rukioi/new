@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { z } from 'zod';
 import { AuthenticatedRequest } from '../middleware/auth';
+import { transactionsService } from '../services/transactionsService';
 
 // Validation schemas
 const createTransactionSchema = z.object({
@@ -39,42 +40,43 @@ export class TransactionsController {
         });
       }
 
-      // Mock transactions data
-      const mockTransactions = [
-        {
-          id: 'trans-1',
-          type: 'income',
-          amount: 5500,
-          category_id: 'honorarios',
-          category: '⚖️ Honorários advocatícios',
-          description: 'Honorários - Ação Previdenciária João Santos',
-          date: '2024-01-15T00:00:00Z',
-          payment_method: 'pix',
-          status: 'confirmed',
-          tags: ['Previdenciário', 'João Santos', 'INSS'],
-          project_id: 'project-1',
-          project_title: 'Ação Previdenciária - João Santos',
-          client_id: 'client-1',
-          client_name: 'João Santos',
-          is_recurring: false,
-          created_by: req.user.id,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          notes: 'Pagamento recebido via PIX',
-        }
-      ];
+      // Extract query parameters for filtering
+      const {
+        page,
+        limit,
+        type,
+        status,
+        categoryId,
+        search,
+        tags,
+        projectId,
+        clientId,
+        dateFrom,
+        dateTo,
+        paymentMethod,
+        isRecurring
+      } = req.query;
 
-      res.json({
-        transactions: mockTransactions,
-        pagination: {
-          page: 1,
-          limit: 50,
-          total: mockTransactions.length,
-          totalPages: 1,
-          hasNext: false,
-          hasPrev: false,
-        },
-      });
+      const filters = {
+        page: page ? parseInt(page as string) : undefined,
+        limit: limit ? parseInt(limit as string) : undefined,
+        type: type as 'income' | 'expense' | undefined,
+        status: status as string | undefined,
+        categoryId: categoryId as string | undefined,
+        search: search as string | undefined,
+        tags: tags ? (Array.isArray(tags) ? tags as string[] : [tags as string]) : undefined,
+        projectId: projectId as string | undefined,
+        clientId: clientId as string | undefined,
+        dateFrom: dateFrom as string | undefined,
+        dateTo: dateTo as string | undefined,
+        paymentMethod: paymentMethod as string | undefined,
+        isRecurring: isRecurring ? isRecurring === 'true' : undefined
+      };
+
+      // Get transactions from database
+      const result = await transactionsService.getTransactions(req.tenantId, filters);
+
+      res.json(result);
     } catch (error) {
       console.error('Get transactions error:', error);
       res.status(500).json({
@@ -99,15 +101,17 @@ export class TransactionsController {
 
       const { id } = req.params;
 
-      const mockTransaction = {
-        id,
-        type: 'income',
-        amount: 5500,
-        description: 'Honorários advocatícios',
-        status: 'confirmed',
-      };
+      // Get transaction from database
+      const transaction = await transactionsService.getTransactionById(req.tenantId, id);
 
-      res.json({ transaction: mockTransaction });
+      if (!transaction) {
+        return res.status(404).json({
+          error: 'Transaction not found',
+          message: 'The requested transaction does not exist or has been deleted'
+        });
+      }
+
+      res.json({ transaction });
     } catch (error) {
       console.error('Get transaction error:', error);
       res.status(500).json({
@@ -132,18 +136,16 @@ export class TransactionsController {
 
       const validatedData = createTransactionSchema.parse(req.body);
 
-      const mockTransaction = {
-        id: 'trans-' + Date.now(),
-        ...validatedData,
-        created_by: req.user.id,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        is_active: true,
-      };
+      // Create transaction in database
+      const transaction = await transactionsService.createTransaction(
+        req.tenantId,
+        validatedData,
+        req.user.id
+      );
 
       res.status(201).json({
         message: 'Transaction created successfully',
-        transaction: mockTransaction,
+        transaction,
       });
     } catch (error) {
       console.error('Create transaction error:', error);
@@ -170,15 +172,23 @@ export class TransactionsController {
       const { id } = req.params;
       const validatedData = updateTransactionSchema.parse(req.body);
 
-      const mockTransaction = {
+      // Update transaction in database
+      const transaction = await transactionsService.updateTransaction(
+        req.tenantId,
         id,
-        ...validatedData,
-        updated_at: new Date().toISOString(),
-      };
+        validatedData
+      );
+
+      if (!transaction) {
+        return res.status(404).json({
+          error: 'Transaction not found',
+          message: 'The requested transaction does not exist or has been deleted'
+        });
+      }
 
       res.json({
         message: 'Transaction updated successfully',
-        transaction: mockTransaction,
+        transaction,
       });
     } catch (error) {
       console.error('Update transaction error:', error);
@@ -203,6 +213,16 @@ export class TransactionsController {
       }
 
       const { id } = req.params;
+
+      // Delete transaction from database
+      const success = await transactionsService.deleteTransaction(req.tenantId, id);
+
+      if (!success) {
+        return res.status(404).json({
+          error: 'Transaction not found',
+          message: 'The requested transaction does not exist or has already been deleted'
+        });
+      }
 
       res.json({
         message: 'Transaction deleted successfully',
