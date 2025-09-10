@@ -299,7 +299,7 @@ export class ClientsService {
       if (updateData.hasOwnProperty(key)) {
         const value = (updateData as any)[key];
         if (key === 'address' || key === 'tags') {
-          updateFields.push(`${dbField} = $${paramIndex}`);
+          updateFields.push(`${dbField} = $${paramIndex}::jsonb`);
           params.push(JSON.stringify(value));
         } else {
           updateFields.push(`${dbField} = $${paramIndex}`);

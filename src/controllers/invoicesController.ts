@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { z } from 'zod';
 import { AuthenticatedRequest } from '../middleware/auth';
+import { invoicesService } from '../services/invoicesService';
 
 // Validation schemas
 const createInvoiceSchema = z.object({
@@ -44,49 +45,26 @@ export class InvoicesController {
         });
       }
 
-      // Mock invoices data
-      const mockInvoices = [
-        {
-          id: 'inv-1',
-          number: 'INV-001',
-          title: 'Fatura de Serviços Jurídicos',
-          description: 'Serviços prestados em Janeiro 2024',
-          client_id: 'client-1',
-          client_name: 'Maria Silva Santos',
-          client_email: 'maria@silva.com.br',
-          client_phone: '(11) 99999-1234',
-          amount: 2750,
-          currency: 'BRL',
-          status: 'pending',
-          due_date: '2024-02-20T00:00:00Z',
-          items: [
-            {
-              id: '1',
-              description: 'Consulta jurídica especializada',
-              quantity: 2,
-              rate: 500,
-              amount: 1000,
-              tax: 0,
-            }
-          ],
-          tags: ['Fatura', 'Serviços Jurídicos'],
-          created_by: req.user.id,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }
-      ];
+      console.log('Fetching invoices for tenant:', req.tenantId);
 
-      res.json({
-        invoices: mockInvoices,
-        pagination: {
-          page: 1,
-          limit: 50,
-          total: mockInvoices.length,
-          totalPages: 1,
-          hasNext: false,
-          hasPrev: false,
-        },
-      });
+      // Extrair filtros da query
+      const filters = {
+        page: parseInt(req.query.page as string) || 1,
+        limit: parseInt(req.query.limit as string) || 50,
+        status: req.query.status as string,
+        paymentStatus: req.query.paymentStatus as string,
+        search: req.query.search as string,
+        tags: req.query.tags ? (req.query.tags as string).split(',') : undefined,
+        clientId: req.query.clientId as string,
+        dateFrom: req.query.dateFrom as string,
+        dateTo: req.query.dateTo as string
+      };
+
+      const result = await invoicesService.getInvoices(req.tenantId, filters);
+      
+      console.log('Invoices fetched successfully:', { count: result.invoices.length, total: result.pagination.total });
+      
+      res.json(result);
     } catch (error) {
       console.error('Get invoices error:', error);
       res.status(500).json({
@@ -111,15 +89,20 @@ export class InvoicesController {
 
       const { id } = req.params;
 
-      const mockInvoice = {
-        id,
-        number: 'INV-001',
-        title: 'Fatura de Serviços',
-        amount: 2750,
-        status: 'pending',
-      };
+      console.log('Fetching invoice by ID:', id, 'for tenant:', req.tenantId);
 
-      res.json({ invoice: mockInvoice });
+      const invoice = await invoicesService.getInvoiceById(req.tenantId, id);
+
+      if (!invoice) {
+        return res.status(404).json({
+          error: 'Invoice not found',
+          message: 'The specified invoice could not be found',
+        });
+      }
+
+      console.log('Invoice fetched successfully:', { id: invoice.id, number: invoice.number });
+
+      res.json({ invoice });
     } catch (error) {
       console.error('Get invoice error:', error);
       res.status(500).json({
@@ -144,18 +127,15 @@ export class InvoicesController {
 
       const validatedData = createInvoiceSchema.parse(req.body);
 
-      const mockInvoice = {
-        id: 'inv-' + Date.now(),
-        ...validatedData,
-        created_by: req.user.id,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        is_active: true,
-      };
+      console.log('Creating invoice for tenant:', req.tenantId, 'by user:', req.user.id);
+
+      const invoice = await invoicesService.createInvoice(req.tenantId, validatedData, req.user.id);
+
+      console.log('Invoice created successfully:', { id: invoice.id, number: invoice.number });
 
       res.status(201).json({
         message: 'Invoice created successfully',
-        invoice: mockInvoice,
+        invoice,
       });
     } catch (error) {
       console.error('Create invoice error:', error);
@@ -182,15 +162,22 @@ export class InvoicesController {
       const { id } = req.params;
       const validatedData = updateInvoiceSchema.parse(req.body);
 
-      const mockInvoice = {
-        id,
-        ...validatedData,
-        updated_at: new Date().toISOString(),
-      };
+      console.log('Updating invoice:', id, 'for tenant:', req.tenantId);
+
+      const invoice = await invoicesService.updateInvoice(req.tenantId, id, validatedData);
+
+      if (!invoice) {
+        return res.status(404).json({
+          error: 'Invoice not found',
+          message: 'The specified invoice could not be found or updated',
+        });
+      }
+
+      console.log('Invoice updated successfully:', { id: invoice.id, number: invoice.number });
 
       res.json({
         message: 'Invoice updated successfully',
-        invoice: mockInvoice,
+        invoice,
       });
     } catch (error) {
       console.error('Update invoice error:', error);
@@ -215,6 +202,19 @@ export class InvoicesController {
       }
 
       const { id } = req.params;
+
+      console.log('Deleting invoice:', id, 'for tenant:', req.tenantId);
+
+      const deleted = await invoicesService.deleteInvoice(req.tenantId, id);
+
+      if (!deleted) {
+        return res.status(404).json({
+          error: 'Invoice not found',
+          message: 'The specified invoice could not be found or deleted',
+        });
+      }
+
+      console.log('Invoice deleted successfully:', id);
 
       res.json({
         message: 'Invoice deleted successfully',
@@ -244,19 +244,27 @@ export class InvoicesController {
         });
       }
 
-      // Mock invoice stats
-      const mockStats = {
-        totalInvoices: 45,
-        totalAmount: 125000,
-        paidAmount: 98000,
-        pendingAmount: 22000,
-        overdueAmount: 5000,
-        paidCount: 38,
-        pendingCount: 6,
-        overdueCount: 1,
+      console.log('Fetching invoice stats for tenant:', req.tenantId);
+
+      const stats = await invoicesService.getInvoicesStats(req.tenantId);
+
+      console.log('Invoice stats fetched successfully:', stats);
+
+      // Map service stats to expected frontend format
+      const formattedStats = {
+        totalInvoices: stats.total,
+        totalAmount: stats.totalAmount,
+        paidAmount: stats.paidAmount,
+        pendingAmount: stats.totalAmount - stats.paidAmount,
+        overdueAmount: 0, // Will need to calculate based on overdue status
+        paidCount: stats.paid,
+        pendingCount: stats.pending,
+        overdueCount: stats.overdue,
+        draftCount: stats.draft,
+        thisMonth: stats.thisMonth
       };
 
-      res.json(mockStats);
+      res.json(formattedStats);
     } catch (error) {
       console.error('Get invoice stats error:', error);
       res.status(500).json({

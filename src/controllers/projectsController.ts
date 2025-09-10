@@ -71,17 +71,23 @@ export class ProjectsController {
       }
 
       const { id } = req.params;
+      
+      console.log('Fetching project:', id, 'for tenant:', req.tenantId);
 
-      const mockProject = {
-        id,
-        title: 'Ação Previdenciária - João Santos',
-        description: 'Revisão de aposentadoria negada pelo INSS',
-        client_name: 'João Santos',
-        status: 'proposal',
-        tasks: [],
-      };
+      const project = await projectsService.getProjectById(req.tenantId, id);
+      
+      if (!project) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
+      
+      console.log('Project fetched successfully:', project.id);
 
-      res.json({ project: mockProject });
+      res.json({
+        project,
+        related: {
+          tasks: [],
+        },
+      });
     } catch (error) {
       console.error('Get project error:', error);
       res.status(500).json({
@@ -97,21 +103,17 @@ export class ProjectsController {
         return res.status(401).json({ error: 'Authentication required' });
       }
 
+      console.log('Creating project for tenant:', req.tenantId, 'by user:', req.user.id);
+
       const validatedData = createProjectSchema.parse(req.body);
 
-      const mockProject = {
-        id: 'project-' + Date.now(),
-        ...validatedData,
-        created_by: req.user.id,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        is_active: true,
-        progress: 0,
-      };
+      const project = await projectsService.createProject(req.tenantId, validatedData, req.user.id);
+      
+      console.log('Project created successfully:', project.id);
 
       res.status(201).json({
         message: 'Project created successfully',
-        project: mockProject,
+        project,
       });
     } catch (error) {
       console.error('Create project error:', error);
@@ -130,16 +132,20 @@ export class ProjectsController {
 
       const { id } = req.params;
       const validatedData = updateProjectSchema.parse(req.body);
+      
+      console.log('Updating project:', id, 'for tenant:', req.tenantId);
 
-      const mockProject = {
-        id,
-        ...validatedData,
-        updated_at: new Date().toISOString(),
-      };
+      const project = await projectsService.updateProject(req.tenantId, id, validatedData);
+      
+      if (!project) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
+      
+      console.log('Project updated successfully:', project.id);
 
       res.json({
         message: 'Project updated successfully',
-        project: mockProject,
+        project,
       });
     } catch (error) {
       console.error('Update project error:', error);
@@ -157,6 +163,16 @@ export class ProjectsController {
       }
 
       const { id } = req.params;
+      
+      console.log('Deleting project:', id, 'for tenant:', req.tenantId);
+
+      const success = await projectsService.deleteProject(req.tenantId, id);
+      
+      if (!success) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
+      
+      console.log('Project deleted successfully:', id);
 
       res.json({
         message: 'Project deleted successfully',

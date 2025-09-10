@@ -6,7 +6,7 @@ import { clientsService } from '../services/clientsService';
 // Validation schemas
 const createClientSchema = z.object({
   name: z.string().min(1, 'Name is required'),
-  email: z.string().email().optional(),
+  email: z.string().email('Invalid email format'),
   phone: z.string().min(1, 'Phone is required'),
   organization: z.string().optional(),
   address: z.object({
@@ -126,16 +126,20 @@ export class ClientsController {
 
       const { id } = req.params;
       const validatedData = updateClientSchema.parse(req.body);
+      
+      console.log('Updating client:', id, 'for tenant:', req.tenantId);
 
-      const mockClient = {
-        id,
-        ...validatedData,
-        updated_at: new Date().toISOString(),
-      };
+      const client = await clientsService.updateClient(req.tenantId, id, validatedData);
+      
+      if (!client) {
+        return res.status(404).json({ error: 'Client not found' });
+      }
+      
+      console.log('Client updated successfully:', client.id);
 
       res.json({
         message: 'Client updated successfully',
-        client: mockClient,
+        client,
       });
     } catch (error) {
       console.error('Update client error:', error);
@@ -153,6 +157,16 @@ export class ClientsController {
       }
 
       const { id } = req.params;
+      
+      console.log('Deleting client:', id, 'for tenant:', req.tenantId);
+
+      const success = await clientsService.deleteClient(req.tenantId, id);
+      
+      if (!success) {
+        return res.status(404).json({ error: 'Client not found' });
+      }
+      
+      console.log('Client deleted successfully:', id);
 
       res.json({
         message: 'Client deleted successfully',
