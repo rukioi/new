@@ -45,6 +45,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
+      // Set token in apiService
+      apiService.setToken(token);
+      
       const response = await apiService.getProfile();
       setUser(response.user);
     } catch (error) {

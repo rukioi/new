@@ -14,6 +14,11 @@ class ApiService {
     this.token = localStorage.getItem('access_token');
   }
 
+  setToken(token: string) {
+    this.token = token;
+    localStorage.setItem('access_token', token);
+  }
+
   private async request(endpoint: string, options: RequestInit = {}) {
     const url = `${this.baseUrl}${endpoint}`;
     
