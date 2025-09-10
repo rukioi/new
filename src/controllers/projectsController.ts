@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { z } from 'zod';
 import { AuthenticatedRequest } from '../middleware/auth';
+import { projectsService } from '../services/projectsService';
 
 // Validation schemas
 const createProjectSchema = z.object({
@@ -36,43 +37,24 @@ export class ProjectsController {
         return res.status(401).json({ error: 'Authentication required' });
       }
 
-      // Mock projects data
-      const mockProjects = [
-        {
-          id: 'project-1',
-          title: 'Ação Previdenciária - João Santos',
-          description: 'Revisão de aposentadoria negada pelo INSS',
-          client_name: 'João Santos',
-          client_id: 'client-1',
-          organization: '',
-          address: 'Rua das Flores, 123, São Paulo - SP',
-          budget: 8500,
-          currency: 'BRL',
-          status: 'proposal',
-          priority: 'high',
-          progress: 65,
-          start_date: '2024-01-05T00:00:00Z',
-          due_date: '2024-03-15T00:00:00Z',
-          tags: ['Previdenciário', 'INSS', 'Urgente'],
-          assigned_to: ['Dr. Silva', 'Ana Paralegal'],
-          notes: 'Cliente já possui todos os documentos necessários',
-          created_by: req.user.id,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }
-      ];
+      console.log('Fetching projects for tenant:', req.tenantId);
 
-      res.json({
-        projects: mockProjects,
-        pagination: {
-          page: 1,
-          limit: 50,
-          total: mockProjects.length,
-          totalPages: 1,
-          hasNext: false,
-          hasPrev: false,
-        },
-      });
+      // Extrair filtros da query
+      const filters = {
+        page: parseInt(req.query.page as string) || 1,
+        limit: parseInt(req.query.limit as string) || 50,
+        status: req.query.status as string,
+        priority: req.query.priority as string,
+        search: req.query.search as string,
+        tags: req.query.tags ? (req.query.tags as string).split(',') : undefined,
+        assignedTo: req.query.assignedTo ? (req.query.assignedTo as string).split(',') : undefined
+      };
+
+      const result = await projectsService.getProjects(req.tenantId, filters);
+      
+      console.log('Projects fetched successfully:', { count: result.projects.length, total: result.pagination.total });
+      
+      res.json(result);
     } catch (error) {
       console.error('Get projects error:', error);
       res.status(500).json({
