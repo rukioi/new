@@ -33,7 +33,7 @@ initializeResizeObserverFix();
 const queryClient = new QueryClient();
 
 // Global logout function
-window.logout = () => {
+(window as any).logout = () => {
   localStorage.removeItem('access_token');
   localStorage.removeItem('refresh_token');
   window.location.href = '/login';
