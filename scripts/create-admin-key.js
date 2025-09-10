@@ -5,9 +5,9 @@
  * Uso: node scripts/create-admin-key.js
  */
 
-const { PrismaClient } = require('@prisma/client');
-const bcrypt = require('bcrypt');
-const crypto = require('crypto');
+import { PrismaClient } from '@prisma/client';
+import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 
 const prisma = new PrismaClient();
 
