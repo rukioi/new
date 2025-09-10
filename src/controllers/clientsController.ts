@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { z } from 'zod';
 import { AuthenticatedRequest } from '../middleware/auth';
+import { clientsService } from '../services/clientsService';
 
 // Validation schemas
 const createClientSchema = z.object({
@@ -31,43 +32,22 @@ export class ClientsController {
         return res.status(401).json({ error: 'Authentication required' });
       }
 
-      // Mock clients data
-      const mockClients = [
-        {
-          id: 'client-1',
-          name: 'Maria Silva Santos',
-          email: 'maria@silva.com.br',
-          phone: '(11) 99999-1234',
-          organization: 'Silva & Associates',
-          address: {
-            street: 'Rua Augusta, 123',
-            city: 'São Paulo',
-            state: 'SP',
-            zipCode: '01305-000',
-            country: 'Brasil',
-          },
-          budget: 15000,
-          currency: 'BRL',
-          status: 'active',
-          tags: ['Direito Civil', 'Premium'],
-          notes: 'Cliente premium',
-          created_by: req.user.id,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }
-      ];
+      console.log('Fetching clients for tenant:', req.tenantId);
 
-      res.json({
-        clients: mockClients,
-        pagination: {
-          page: 1,
-          limit: 50,
-          total: mockClients.length,
-          totalPages: 1,
-          hasNext: false,
-          hasPrev: false,
-        },
-      });
+      // Extrair filtros da query
+      const filters = {
+        page: parseInt(req.query.page as string) || 1,
+        limit: parseInt(req.query.limit as string) || 50,
+        status: req.query.status as string,
+        search: req.query.search as string,
+        tags: req.query.tags ? (req.query.tags as string).split(',') : undefined
+      };
+
+      const result = await clientsService.getClients(req.tenantId, filters);
+      
+      console.log('Clients fetched successfully:', { count: result.clients.length, total: result.pagination.total });
+      
+      res.json(result);
     } catch (error) {
       console.error('Get clients error:', error);
       res.status(500).json({
@@ -84,18 +64,19 @@ export class ClientsController {
       }
 
       const { id } = req.params;
+      
+      console.log('Fetching client:', id, 'for tenant:', req.tenantId);
 
-      // Mock client data
-      const mockClient = {
-        id,
-        name: 'Maria Silva Santos',
-        email: 'maria@silva.com.br',
-        phone: '(11) 99999-1234',
-        status: 'active',
-      };
+      const client = await clientsService.getClientById(req.tenantId, id);
+      
+      if (!client) {
+        return res.status(404).json({ error: 'Client not found' });
+      }
+      
+      console.log('Client fetched successfully:', client.id);
 
       res.json({
-        client: mockClient,
+        client,
         related: {
           projects: [],
           tasks: [],
@@ -117,19 +98,16 @@ export class ClientsController {
       }
 
       const validatedData = createClientSchema.parse(req.body);
+      
+      console.log('Creating client for tenant:', req.tenantId, 'by user:', req.user.id);
 
-      const mockClient = {
-        id: 'client-' + Date.now(),
-        ...validatedData,
-        created_by: req.user.id,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        is_active: true,
-      };
+      const client = await clientsService.createClient(req.tenantId, validatedData, req.user.id);
+      
+      console.log('Client created successfully:', client.id);
 
       res.status(201).json({
         message: 'Client created successfully',
-        client: mockClient,
+        client,
       });
     } catch (error) {
       console.error('Create client error:', error);
