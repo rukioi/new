@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { z } from 'zod';
 import { AuthenticatedRequest } from '../middleware/auth';
+import { tasksService } from '../services/tasksService';
 
 // Validation schemas
 const createTaskSchema = z.object({
@@ -38,41 +39,22 @@ export class TasksController {
         return res.status(401).json({ error: 'Authentication required' });
       }
 
-      // Mock tasks data
-      const mockTasks = [
-        {
-          id: 'task-1',
-          title: 'Revisar contrato de prestação de serviços',
-          description: 'Analisar cláusulas contratuais',
-          start_date: '2024-01-20T00:00:00Z',
-          end_date: '2024-01-25T00:00:00Z',
-          status: 'in_progress',
-          priority: 'high',
-          assigned_to: 'Dr. Silva',
-          project_id: 'project-1',
-          project_title: 'Ação Previdenciária - João Santos',
-          client_id: 'client-1',
-          client_name: 'João Santos',
-          tags: ['Contrato', 'Revisão', 'Urgente'],
-          estimated_hours: 4,
-          actual_hours: 2.5,
-          progress: 60,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          notes: 'Cliente solicitou urgência',
-          subtasks: [],
-        }
-      ];
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 50;
+      const offset = (page - 1) * limit;
+
+      const { tasks, total } = await tasksService.getTasks(req.tenantId, limit, offset);
+      const totalPages = Math.ceil(total / limit);
 
       res.json({
-        tasks: mockTasks,
+        tasks,
         pagination: {
-          page: 1,
-          limit: 50,
-          total: mockTasks.length,
-          totalPages: 1,
-          hasNext: false,
-          hasPrev: false,
+          page,
+          limit,
+          total,
+          totalPages,
+          hasNext: page < totalPages,
+          hasPrev: page > 1,
         },
       });
     } catch (error) {
@@ -117,18 +99,16 @@ export class TasksController {
 
       const validatedData = createTaskSchema.parse(req.body);
 
-      const mockTask = {
-        id: 'task-' + Date.now(),
+      const taskData = {
         ...validatedData,
         created_by: req.user.id,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        is_active: true,
       };
+
+      const task = await tasksService.createTask(req.tenantId, taskData);
 
       res.status(201).json({
         message: 'Task created successfully',
-        task: mockTask,
+        task,
       });
     } catch (error) {
       console.error('Create task error:', error);
@@ -148,15 +128,15 @@ export class TasksController {
       const { id } = req.params;
       const validatedData = updateTaskSchema.parse(req.body);
 
-      const mockTask = {
-        id,
-        ...validatedData,
-        updated_at: new Date().toISOString(),
-      };
+      const task = await tasksService.updateTask(req.tenantId, id, validatedData);
+
+      if (!task) {
+        return res.status(404).json({ error: 'Task not found' });
+      }
 
       res.json({
         message: 'Task updated successfully',
-        task: mockTask,
+        task,
       });
     } catch (error) {
       console.error('Update task error:', error);
@@ -174,6 +154,12 @@ export class TasksController {
       }
 
       const { id } = req.params;
+
+      const success = await tasksService.deleteTask(req.tenantId, id);
+
+      if (!success) {
+        return res.status(404).json({ error: 'Task not found' });
+      }
 
       res.json({
         message: 'Task deleted successfully',
@@ -193,21 +179,15 @@ export class TasksController {
         return res.status(401).json({ error: 'Authentication required' });
       }
 
-      // Mock task stats
-      const mockStats = {
-        total: 89,
-        notStarted: 15,
-        inProgress: 32,
-        completed: 38,
-        onHold: 3,
-        cancelled: 1,
-        overdue: 5,
-        completionRate: 43,
-        averageProgress: 67,
-        averageCompletionTime: 8,
-      };
+      const stats = await tasksService.getTaskStats(req.tenantId);
 
-      res.json(mockStats);
+      res.json({
+        total: parseInt(stats.total) || 0,
+        completed: parseInt(stats.completed) || 0,
+        in_progress: parseInt(stats.in_progress) || 0,
+        not_started: parseInt(stats.not_started) || 0,
+        urgent: parseInt(stats.urgent) || 0,
+      });
     } catch (error) {
       console.error('Get task stats error:', error);
       res.status(500).json({
